@@ -16,12 +16,16 @@ func SetGlobalLogger(logger zerolog.Logger) {
 	globalLogger = logger
 }
 
+const (
+	errorLoggingKey = "error"
+)
+
 type TraceLogger struct {
 	span   trace.Span
 	logger zerolog.Logger
 }
 
-func New(ctx context.Context, name string) (tl *TraceLogger, ctxWithTraceId context.Context) {
+func NewTraceLogger(ctx context.Context, name string) (tl *TraceLogger, ctxWithTraceId context.Context) {
 	tl = &TraceLogger{logger: globalLogger}
 	ctx, tl.span = otel.Tracer("").Start(ctx, name)
 	return tl, ctx
@@ -78,14 +82,14 @@ func (t *TraceLogger) EndSpanWithRecordError(err error) {
 		return
 	}
 
-	defer t.span.End()
-
 	if err != nil {
 		t.span.RecordError(err)
 		t.span.SetStatus(codes.Error, err.Error())
 	} else {
 		t.span.SetStatus(codes.Ok, "")
 	}
+
+	t.EndSpan()
 }
 
 func (t *TraceLogger) EndSpan() {
@@ -100,5 +104,17 @@ func (t *TraceLogger) TraceId() (id string) {
 	if t.span != nil {
 		return t.span.SpanContext().TraceID().String()
 	}
+	return
+}
+
+func ErrorToKeyValue(err error) (kv KeyValue) {
+	if err == nil {
+		return
+	}
+
+	kv.vtype = vTypeString
+	kv.key = errorLoggingKey
+	kv.value = err.Error()
+
 	return
 }
